@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string>
 
+#include "spec.hpp"
+
 #include "qch_vm.hpp"
 
 qch_vm::machine::machine() {
@@ -15,6 +17,28 @@ qch_vm::machine::machine() {
 
   engine.seed(std::random_device{}());
 };
+
+qch::instruction modify(const qch::instruction &inst, const uint16_t data) {
+  qch::instruction new_inst = inst;
+  new_inst.data = data;
+
+  return new_inst;
+}
+
+qch::instruction qch_vm::fetch_instruction(const machine &m) {
+  uint16_t x = (m.mem.at(m.pc) << 8) | m.mem.at(m.pc + 1);
+
+  for (const auto &inst_ref : qch::isa) {
+    if (inst_ref.value == (x & inst_ref.mask)) {
+      qch::instruction inst = inst_ref;
+      inst.data = x;
+
+      return inst;
+    }
+  }
+
+  return qch::unknown_instruction;
+}
 
 qch_vm::opcode qch_vm::fetch_opcode(const machine &m) {
   return opcode(m.mem.at(m.pc) << 8) | m.mem.at(m.pc + 1);
@@ -63,6 +87,11 @@ qch_vm::func_t qch_vm::decode_opcode(const opcode &op) {
 
 uint8_t qch_vm::sprite_address(const uint8_t index) {
   return font_index + (index * 5);
+}
+
+void qch_vm::load_program(machine &m, const std::vector<uint8_t> &program) {
+  std::copy(program.begin(), program.end(), &m.mem[entry_point]);
+  m.program_size = program.size();
 }
 
 std::string qch_vm::dump_registers(const machine &m, bool ascii) {

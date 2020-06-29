@@ -7,6 +7,8 @@
 #include <random>
 #include <string>
 
+#include "spec.hpp"
+
 namespace qch_vm {
   constexpr uint16_t entry_point = 0x200;
   constexpr uint16_t font_index = 0x50;
@@ -58,6 +60,7 @@ namespace qch_vm {
     uint8_t delay_timer = 0;
     uint8_t sound_timer = 0;
 
+    uint16_t program_size;
     bool quit=false;
     bool draw=false;
     bool blocking=false;
@@ -72,9 +75,14 @@ namespace qch_vm {
   };
 
   using func_t = std::function<void(machine &m, const opcode &op)>;
+
+  qch::instruction fetch_instruction(const machine &m);
+
   opcode fetch_opcode(const machine &m);
   func_t decode_opcode(const opcode &op);
   uint8_t sprite_address(const uint8_t index);
+
+  void load_program(machine &m, const std::vector<uint8_t> &program);
 
   std::string dump_registers(const machine &m, bool ascii=false);
   std::string dump_graphics_data(const machine &m);
