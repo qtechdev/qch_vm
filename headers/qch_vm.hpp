@@ -76,6 +76,8 @@ namespace qch_vm {
   func_t decode_opcode(const opcode &op);
   uint8_t sprite_address(const uint8_t index);
 
+  void load_program(machine &m, const std::vector<uint8_t> &program);
+
   std::string dump_registers(const machine &m, bool ascii=false);
   std::string dump_graphics_data(const machine &m);
   std::string dump_memory(const machine &m);

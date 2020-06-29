@@ -65,6 +65,10 @@ uint8_t qch_vm::sprite_address(const uint8_t index) {
   return font_index + (index * 5);
 }
 
+void qch_vm::load_program(machine &m, const std::vector<uint8_t> &program) {
+  std::copy(program.begin(), program.end(), &m.mem[entry_point]);
+}
+
 std::string qch_vm::dump_registers(const machine &m, bool ascii) {
   std::stringstream ss;
   char buf[12];
