@@ -2,7 +2,7 @@
 #define __QCH_SPEC_HPP__
 #include <array>
 #include <cstdint>
-#include <string_view>
+#include <string>
 
 namespace qch {
   namespace arg_type {
@@ -35,14 +35,14 @@ namespace qch {
     uint16_t mask;
     uint16_t data;
     args_config args;
-    std::string_view name;
+    std::string name;
   };
 
-  static constexpr instruction unknown_instruction = {
+  static const instruction unknown_instruction = {
     0xdead, 0xbeef, 0x0000, args_config::Z, "unknown instruction"
   };
 
-  static constexpr std::array<instruction, 36> isa = {{
+  static const std::array<instruction, 36> isa = {{
     {0x00e0, 0xffff, 0x0000, args_config::Z, "clear"},
     {0x00ee, 0xffff, 0x0000, args_config::Z, "ret"},
     {0x1000, 0xf000, 0x0000, args_config::A, "jmp"},
@@ -82,32 +82,34 @@ namespace qch {
     {0xffff, 0xffff, 0x0000, args_config::Z, "halt"},
   }};
 
-  static constexpr std::string_view reg_token = "&";
-  static constexpr std::string_view data_token = "$ ";
+  static std::string reg_token = "&";
+  static std::string data_token = "$ ";
+  static std::string label_token = ":";
+  static std::string comment_token = "//";
 
-  static constexpr uint8_t split_r(const instruction &inst) {
+  static constexpr uint8_t get_r(const instruction &inst) {
     return (inst.data & 0x0f00) >> 8;
   }
 
-  static constexpr uint16_t split_a(const instruction &inst) {
+  static constexpr uint16_t get_a(const instruction &inst) {
     return inst.data & 0x0fff;
   }
 
-  static constexpr std::array<uint8_t, 2> split_rr(const instruction &inst) {
+  static constexpr std::array<uint8_t, 2> get_rr(const instruction &inst) {
     uint8_t x = (inst.data & 0x0f00) >> 8;
     uint8_t y = (inst.data & 0x00f0) >> 4;
 
     return {x, y};
   }
 
-  static constexpr std::array<uint8_t, 2> split_rb(const instruction &inst) {
+  static constexpr std::array<uint8_t, 2> get_rb(const instruction &inst) {
     uint8_t x = (inst.data & 0x0f00) >> 8;
     uint8_t b = (inst.data & 0x00ff);
 
     return {x, b};
   }
 
-  static constexpr std::array<uint8_t, 3> split_rrn(const instruction &inst) {
+  static constexpr std::array<uint8_t, 3> get_rrn(const instruction &inst) {
     uint8_t x = (inst.data & 0x0f00) >> 8;
     uint8_t y = (inst.data & 0x00f0) >> 4;
     uint8_t n = (inst.data & 0x000f);

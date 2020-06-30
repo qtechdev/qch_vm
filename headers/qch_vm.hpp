@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <ostream>
 #include <random>
 #include <string>
@@ -65,21 +66,15 @@ namespace qch_vm {
     bool draw=false;
     bool blocking=false;
     bool halted=false;
-    constexpr static int debug_out_size = 100;
-    char debug_out[debug_out_size] = "qch_vm was not compiled with debugging output";
-    #ifndef DEBUG
-    bool debug_enabled=false;
-    #else
-    bool debug_enabled=true;
-    #endif
+    static constexpr std::size_t final_size = 100;
+    char final[final_size];
   };
 
-  using func_t = std::function<void(machine &m, const opcode &op)>;
+  using fn = std::function<void(machine &m, const qch::instruction &inst)>;
 
   qch::instruction fetch_instruction(const machine &m);
+  fn decode_instruction(const qch::instruction &inst);
 
-  opcode fetch_opcode(const machine &m);
-  func_t decode_opcode(const opcode &op);
   uint8_t sprite_address(const uint8_t index);
 
   void load_program(machine &m, const std::vector<uint8_t> &program);
@@ -88,52 +83,47 @@ namespace qch_vm {
   std::string dump_graphics_data(const machine &m);
   std::string dump_memory(const machine &m);
 
-  uint8_t split_x(const opcode &op);
-  uint16_t split_addr(const opcode &op);
-  std::array<uint8_t, 2> split_xy(const opcode &op);
-  std::array<uint8_t, 2> split_rv(const opcode &op);
-  std::array<uint8_t, 3> split_xyn(const opcode &op);
-
   void get_key(machine &m);
 
-  void nop(machine &m, const opcode &op);
-  void panic(machine &m, const opcode &op);
-  void halt(machine &m, const opcode &op);
-  // void f_0nnn(machine &m, const opcode &op);
-  void f_00e0(machine &m, const opcode &op); // clear
-  void f_00ee(machine &m, const opcode &op); // ret
-  void f_1nnn(machine &m, const opcode &op); // jmp [addr]
-  void f_2nnn(machine &m, const opcode &op); // call [addr]
-  void f_3xnn(machine &m, const opcode &op); // seq [r] [v]
-  void f_4xnn(machine &m, const opcode &op); // sne [r] [v]
-  void f_5xy0(machine &m, const opcode &op); // seqr [x] [y]
-  void f_6xnn(machine &m, const opcode &op); // mov [r] [v]
-  void f_7xnn(machine &m, const opcode &op); // add [r] [v]
-  void f_8xy0(machine &m, const opcode &op); // movr [x] [y]
-  void f_8xy1(machine &m, const opcode &op); // or [x] [y]
-  void f_8xy2(machine &m, const opcode &op); // and [x] [y]
-  void f_8xy3(machine &m, const opcode &op); // xor [x] [y]
-  void f_8xy4(machine &m, const opcode &op); // add [x] [y]
-  void f_8xy5(machine &m, const opcode &op); // sub [x] [y]
-  void f_8xy6(machine &m, const opcode &op); // slr [x]
-  void f_8xy7(machine &m, const opcode &op); // rsub [x] [y]
-  void f_8xye(machine &m, const opcode &op); // sll [x]
-  void f_9xy0(machine &m, const opcode &op); // sner [x] [y]
-  void f_annn(machine &m, const opcode &op); // movi [addr]
-  void f_bnnn(machine &m, const opcode &op); // jmpv [addr]
-  void f_cxnn(machine &m, const opcode &op); // rand [r] [v]
-  void f_dxyn(machine &m, const opcode &op); // draw [r] [r] [v]
-  void f_ex9e(machine &m, const opcode &op); // keq [r]
-  void f_exa1(machine &m, const opcode &op); // kne [r]
-  void f_fx07(machine &m, const opcode &op); // std [r]
-  void f_fx0a(machine &m, const opcode &op); // key [r]
-  void f_fx15(machine &m, const opcode &op); // ldd [r]
-  void f_fx18(machine &m, const opcode &op); // lds [r]
-  void f_fx1e(machine &m, const opcode &op); // addi [x]
-  void f_fx29(machine &m, const opcode &op); // addr [x]
-  void f_fx33(machine &m, const opcode &op); // bcd [x]
-  void f_fx55(machine &m, const opcode &op); // str [x]
-  void f_fx65(machine &m, const opcode &op); // ldr [x]
+  void clear(machine &m, const qch::instruction &inst);
+  void ret(machine &m, const qch::instruction &inst);
+  void jmp(machine &m, const qch::instruction &inst);
+  void call(machine &m, const qch::instruction &inst);
+  void seq(machine &m, const qch::instruction &inst);
+  void sne(machine &m, const qch::instruction &inst);
+  void seqr(machine &m, const qch::instruction &inst);
+  void mov(machine &m, const qch::instruction &inst);
+  void add(machine &m, const qch::instruction &inst);
+  void movr(machine &m, const qch::instruction &inst);
+  void q_or(machine &m, const qch::instruction &inst);
+  void q_and(machine &m, const qch::instruction &inst);
+  void q_xor(machine &m, const qch::instruction &inst);
+  void addr(machine &m, const qch::instruction &inst);
+  void sub(machine &m, const qch::instruction &inst);
+  void slr(machine &m, const qch::instruction &inst);
+  void rsub(machine &m, const qch::instruction &inst);
+  void sll(machine &m, const qch::instruction &inst);
+  void sner(machine &m, const qch::instruction &inst);
+  void movi(machine &m, const qch::instruction &inst);
+  void jmpv(machine &m, const qch::instruction &inst);
+  void rand(machine &m, const qch::instruction &inst);
+  void draw(machine &m, const qch::instruction &inst);
+  void keq(machine &m, const qch::instruction &inst);
+  void kne(machine &m, const qch::instruction &inst);
+  void std(machine &m, const qch::instruction &inst);
+  void key(machine &m, const qch::instruction &inst);
+  void ldd(machine &m, const qch::instruction &inst);
+  void lds(machine &m, const qch::instruction &inst);
+  void addi(machine &m, const qch::instruction &inst);
+  void sprite(machine &m, const qch::instruction &inst);
+  void bcd(machine &m, const qch::instruction &inst);
+  void str(machine &m, const qch::instruction &inst);
+  void ldr(machine &m, const qch::instruction &inst);
+
+  void nop(machine &m, const qch::instruction &inst);
+  void halt(machine &m, const qch::instruction &inst);
+
+  void panic(machine &m, const qch::instruction &inst);
 };
 
 #endif // __QCH_VM_HPP__
