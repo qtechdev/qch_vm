@@ -6,7 +6,48 @@
 #include <sstream>
 #include <string>
 
+#include "spec.hpp"
+
 #include "qch_vm.hpp"
+
+static std::map<uint16_t, qch_vm::fn> fn_lookup = {
+  {0x00e0, qch_vm::clear},
+  {0x00ee, qch_vm::ret},
+  {0x1000, qch_vm::jmp},
+  {0x2000, qch_vm::call},
+  {0x3000, qch_vm::seq},
+  {0x4000, qch_vm::sne},
+  {0x5000, qch_vm::seqr},
+  {0x6000, qch_vm::mov},
+  {0x7000, qch_vm::add},
+  {0x8000, qch_vm::movr},
+  {0x8001, qch_vm::q_or},
+  {0x8002, qch_vm::q_and},
+  {0x8003, qch_vm::q_xor},
+  {0x8004, qch_vm::addr},
+  {0x8005, qch_vm::sub},
+  {0x8006, qch_vm::slr},
+  {0x8007, qch_vm::rsub},
+  {0x800e, qch_vm::sll},
+  {0x9000, qch_vm::sner},
+  {0xa000, qch_vm::movi},
+  {0xb000, qch_vm::jmpv},
+  {0xc000, qch_vm::rand},
+  {0xd000, qch_vm::draw},
+  {0xe09e, qch_vm::keq},
+  {0xe0a1, qch_vm::kne},
+  {0xf007, qch_vm::std},
+  {0xf00a, qch_vm::key},
+  {0xf015, qch_vm::ldd},
+  {0xf018, qch_vm::lds},
+  {0xf01e, qch_vm::addi},
+  {0xf029, qch_vm::sprite},
+  {0xf033, qch_vm::bcd},
+  {0xf055, qch_vm::str},
+  {0xf065, qch_vm::ldr},
+  {0x0000, qch_vm::nop},
+  {0xffff, qch_vm::halt},
+};
 
 qch_vm::machine::machine() {
   for (int i = 0; i < char_data.size(); i++) {
@@ -16,49 +57,30 @@ qch_vm::machine::machine() {
   engine.seed(std::random_device{}());
 };
 
-qch_vm::opcode qch_vm::fetch_opcode(const machine &m) {
-  return opcode(m.mem.at(m.pc) << 8) | m.mem.at(m.pc + 1);
+qch::instruction modify(const qch::instruction &inst, const uint16_t data) {
+  qch::instruction new_inst = inst;
+  new_inst.data = data;
+
+  return new_inst;
 }
 
-qch_vm::func_t qch_vm::decode_opcode(const opcode &op) {
-  if (op == 0x0000) { return nop; }
-  if (op == 0xffff) { return halt; }
-  if (op == 0x00e0) { return f_00e0; }
-  if (op == 0x00ee) { return f_00ee; }
-  if ((op & 0xf000) == 0x1000) { return f_1nnn; }
-  if ((op & 0xf000) == 0x2000) { return f_2nnn; }
-  if ((op & 0xf000) == 0x3000) { return f_3xnn; }
-  if ((op & 0xf000) == 0x4000) { return f_4xnn; }
-  if ((op & 0xf000) == 0x5000) { return f_5xy0; }
-  if ((op & 0xf000) == 0x6000) { return f_6xnn; }
-  if ((op & 0xf000) == 0x7000) { return f_7xnn; }
-  if ((op & 0xf00f) == 0x8000) { return f_8xy0; }
-  if ((op & 0xf00f) == 0x8001) { return f_8xy1; }
-  if ((op & 0xf00f) == 0x8002) { return f_8xy2; }
-  if ((op & 0xf00f) == 0x8003) { return f_8xy3; }
-  if ((op & 0xf00f) == 0x8004) { return f_8xy4; }
-  if ((op & 0xf00f) == 0x8005) { return f_8xy5; }
-  if ((op & 0xf00f) == 0x8006) { return f_8xy6; }
-  if ((op & 0xf00f) == 0x8007) { return f_8xy7; }
-  if ((op & 0xf00f) == 0x800e) { return f_8xye; }
-  if ((op & 0xf00f) == 0x9000) { return f_9xy0; }
-  if ((op & 0xf000) == 0xa000) { return f_annn; }
-  if ((op & 0xf000) == 0xb000) { return f_bnnn; }
-  if ((op & 0xf000) == 0xc000) { return f_cxnn; }
-  if ((op & 0xf000) == 0xd000) { return f_dxyn; }
-  if ((op & 0xf0ff) == 0xe09e) { return f_ex9e; }
-  if ((op & 0xf0ff) == 0xe0a1) { return f_exa1; }
-  if ((op & 0xf0ff) == 0xf007) { return f_fx07; }
-  if ((op & 0xf0ff) == 0xf00a) { return f_fx0a; }
-  if ((op & 0xf0ff) == 0xf015) { return f_fx15; }
-  if ((op & 0xf0ff) == 0xf018) { return f_fx18; }
-  if ((op & 0xf0ff) == 0xf01e) { return f_fx1e; }
-  if ((op & 0xf0ff) == 0xf029) { return f_fx29; }
-  if ((op & 0xf0ff) == 0xf033) { return f_fx33; }
-  if ((op & 0xf0ff) == 0xf055) { return f_fx55; }
-  if ((op & 0xf0ff) == 0xf065) { return f_fx65; }
+qch::instruction qch_vm::fetch_instruction(const machine &m) {
+  uint16_t x = (m.mem.at(m.pc) << 8) | m.mem.at(m.pc + 1);
 
-  return panic;
+  for (const auto &inst_ref : qch::isa) {
+    if (inst_ref.value == (x & inst_ref.mask)) {
+      qch::instruction inst = inst_ref;
+      inst.data = x;
+
+      return inst;
+    }
+  }
+
+  return qch::unknown_instruction;
+}
+
+qch_vm::fn qch_vm::decode_instruction(const qch::instruction &inst) {
+  return fn_lookup.at(inst.value & inst.mask);
 }
 
 uint8_t qch_vm::sprite_address(const uint8_t index) {
@@ -67,6 +89,10 @@ uint8_t qch_vm::sprite_address(const uint8_t index) {
 
 void qch_vm::load_program(machine &m, const std::vector<uint8_t> &program) {
   std::copy(program.begin(), program.end(), &m.mem[entry_point]);
+<<<<<<< HEAD
+=======
+  m.program_size = program.size();
+>>>>>>> dev
 }
 
 std::string qch_vm::dump_registers(const machine &m, bool ascii) {
@@ -158,36 +184,6 @@ std::string qch_vm::dump_graphics_data(const machine &m) {
   return ss.str();
 }
 
-uint8_t qch_vm::split_x(const opcode &op) {
-  return (op & 0x0f00) >> 8;
-}
-
-uint16_t qch_vm::split_addr(const opcode &op) {
-  return op & 0x0fff;
-}
-
-std::array<uint8_t, 2> qch_vm::split_xy(const opcode &op) {
-  uint8_t x = (op & 0x0f00) >> 8;
-  uint8_t y = (op & 0x00f0) >> 4;
-
-  return {x, y};
-}
-
-std::array<uint8_t, 2> qch_vm::split_rv(const opcode &op) {
-  uint8_t x = (op & 0x0f00) >> 8;
-  uint8_t nn = (op & 0x00ff);
-
-  return {x, nn};
-}
-
-std::array<uint8_t, 3> qch_vm::split_xyn(const opcode &op) {
-  uint8_t x = (op & 0x0f00) >> 8;
-  uint8_t y = (op & 0x00f0) >> 4;
-  uint8_t n = (op & 0x000f);
-
-  return {x, y, n};
-}
-
 void qch_vm::get_key(machine &m) {
   for (int k = 0; k < m.keys.size(); k++) {
     if (m.keys[k]) {
@@ -198,100 +194,31 @@ void qch_vm::get_key(machine &m) {
   }
 }
 
-void qch_vm::nop(machine &m, const opcode &op) { // HALT
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : NOP", m.pc, op
-  );
-  #endif
-
-  m.pc += 2;
-}
-
-void qch_vm::panic(machine &m, const opcode &op) { // PANIC
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : PANIC!", m.pc, op
-  );
-  #endif
-
-  char buf[7];
-  snprintf(buf,  7, "%#06x", m.pc, op);
-
-  // std::cerr << "Unknown Instruction! [" << buf << "]\n";
-  m.quit = true;
-}
-
-void qch_vm::halt(machine &m, const opcode &op) { // HALT
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : HALT", m.pc, op
-  );
-  #endif
-
-  m.halted = true;
-}
-
-void qch_vm::f_00e0(machine &m, const opcode &op) { // clear
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : clear", m.pc, op
-  );
-  #endif
-
+void qch_vm::clear(machine &m, const qch::instruction &inst) {
   m.gfx.fill(0);
   m.draw = true;
   m.pc += 2;
 }
 
-void qch_vm::f_00ee(machine &m, const opcode &op) { // ret
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : ret", m.pc, op
-  );
-  #endif
-
+void qch_vm::ret(machine &m, const qch::instruction &inst) {
   m.pc = m.stack[--m.sp];
 }
 
-void qch_vm::f_1nnn(machine &m, const opcode &op) { // jmp [addr]
-  auto addr = split_addr(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : jmp %#05x", m.pc, op, addr
-  );
-  #endif
+void qch_vm::jmp(machine &m, const qch::instruction &inst) {
+  auto addr = get_a(inst);
 
   m.pc = addr;
 }
 
-void qch_vm::f_2nnn(machine &m, const opcode &op) { // call [addr]
-  auto addr = split_addr(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : call %#05x", m.pc, op, addr
-  );
-  #endif
+void qch_vm::call(machine &m, const qch::instruction &inst) {
+  auto addr = get_a(inst);
 
   m.stack[m.sp++] = m.pc + 2;
   m.pc = addr;
 }
 
-void qch_vm::f_3xnn(machine &m, const opcode &op) { // seq [r] [v]
-  auto [r, v] = split_rv(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : seq V%x, %#04x", m.pc, op, r, m.reg[r], v
-  );
-  #endif
+void qch_vm::seq(machine &m, const qch::instruction &inst) {
+  auto [r, v] = get_rb(inst);
 
   if (m.reg[r] == v) {
     m.pc += 2;
@@ -299,14 +226,8 @@ void qch_vm::f_3xnn(machine &m, const opcode &op) { // seq [r] [v]
   m.pc += 2;
 }
 
-void qch_vm::f_4xnn(machine &m, const opcode &op) { // sne [r] [v]
-  auto [r, v] = split_rv(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : sne V%x, %#04x", m.pc, op, r, m.reg[r], v
-  );
-  #endif
+void qch_vm::sne(machine &m, const qch::instruction &inst) {
+  auto [r, v] = get_rb(inst);
 
   if (m.reg[r] != v) {
     m.pc += 2;
@@ -314,14 +235,8 @@ void qch_vm::f_4xnn(machine &m, const opcode &op) { // sne [r] [v]
   m.pc += 2;
 }
 
-void qch_vm::f_5xy0(machine &m, const opcode &op) { // seqr [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : seqr V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::seqr(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   if (m.reg[x] == m.reg[y]) {
     m.pc += 2;
@@ -329,92 +244,50 @@ void qch_vm::f_5xy0(machine &m, const opcode &op) { // seqr [x] [y]
   m.pc += 2;
 }
 
-void qch_vm::f_6xnn(qch_vm::machine &m, const qch_vm::opcode &op) { // mov [r] [v]
-  auto [r, v] = split_rv(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : mov V%x, %#04x", m.pc, op, r, v
-  );
-  #endif
+void qch_vm::mov(qch_vm::machine &m, const qch::instruction &inst) {
+  auto [r, v] = get_rb(inst);
 
   m.reg[r] = v;
   m.pc += 2;
 }
 
-void qch_vm::f_7xnn(machine &m, const opcode &op) { // add [r] [v]
-  auto [r, v] = split_rv(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : add V%x, %#04x", m.pc, op, r, v
-  );
-  #endif
+void qch_vm::add(machine &m, const qch::instruction &inst) {
+  auto [r, v] = get_rb(inst);
 
   m.reg[r] += v;
   m.pc += 2;
 }
 
-void qch_vm::f_8xy0(machine &m, const opcode &op) { // movr [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : movr V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::movr(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   m.reg[x] = m.reg[y];
   m.pc += 2;
 }
 
-void qch_vm::f_8xy1(machine &m, const opcode &op) { // or [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : or V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::q_or(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   m.reg[x] |= m.reg[y];
   m.pc += 2;
 }
 
-void qch_vm::f_8xy2(machine &m, const opcode &op) { // and [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : and V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::q_and(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   m.reg[x] &= m.reg[y];
   m.pc += 2;
 }
 
-void qch_vm::f_8xy3(machine &m, const opcode &op) { // xor [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : xor V%x, _REG_", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::q_xor(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   m.reg[x] ^= m.reg[y];
   m.pc += 2;
 }
 
-void qch_vm::f_8xy4(machine &m, const opcode &op) { // add [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : add V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::addr(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   uint16_t tmp = m.reg[x] + m.reg[y];
   // set flag if carry (i.e. 9th bit is set)
@@ -423,14 +296,8 @@ void qch_vm::f_8xy4(machine &m, const opcode &op) { // add [x] [y]
   m.pc += 2;
 }
 
-void qch_vm::f_8xy5(machine &m, const opcode &op) { // sub [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : sub V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::sub(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   uint16_t tmp = m.reg[x] - m.reg[y];
   // set flag if borrow (i.e. 9th bit is not set)
@@ -439,28 +306,16 @@ void qch_vm::f_8xy5(machine &m, const opcode &op) { // sub [x] [y]
   m.pc += 2;
 }
 
-void qch_vm::f_8xy6(machine &m, const opcode &op) { // slr [x]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : slr V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::slr(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   m.reg[0xf] =  m.reg[x] & 0x01;
   m.reg[x] >>= 1;
   m.pc += 2;
 }
 
-void qch_vm::f_8xy7(machine &m, const opcode &op) { // rsub [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : rsub V%x, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::rsub(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   uint16_t tmp = m.reg[y] - m.reg[x];
   // set flag if borrow (i.e. 9th bit is not set)
@@ -468,28 +323,16 @@ void qch_vm::f_8xy7(machine &m, const opcode &op) { // rsub [x] [y]
   m.reg[x] = tmp & 0xff;
 }
 
-void qch_vm::f_8xye(machine &m, const opcode &op) { // sll [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : sll V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::sll(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.reg[0xf] =  (m.reg[x] & 0x70) >> 7;
   m.reg[x] <<= 1;
   m.pc += 2;
 }
 
-void qch_vm::f_9xy0(machine &m, const opcode &op) { // sner [x] [y]
-  auto [x, y] = split_xy(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : sner _REG_e, V%x", m.pc, op, x, y
-  );
-  #endif
+void qch_vm::sner(machine &m, const qch::instruction &inst) {
+  auto [x, y] = get_rr(inst);
 
   if (m.reg[x] != m.reg[y]) {
     m.pc += 2;
@@ -497,53 +340,29 @@ void qch_vm::f_9xy0(machine &m, const opcode &op) { // sner [x] [y]
   m.pc += 2;
 }
 
-void qch_vm::f_annn(machine &m, const opcode &op) { // movi [addr]
-  auto addr = split_addr(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : movi %#05x", m.pc, op, addr
-  );
-  #endif
+void qch_vm::movi(machine &m, const qch::instruction &inst) {
+  auto addr = get_a(inst);
 
   m.I = addr;
   m.pc += 2;
 }
 
-void qch_vm::f_bnnn(machine &m, const opcode &op) { // jmpv [addr]
-  auto addr = split_addr(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : jmpv %#05x", m.pc, op, addr
-  );
-  #endif
+void qch_vm::jmpv(machine &m, const qch::instruction &inst) {
+  auto addr = get_a(inst);
 
   m.pc = addr + m.reg[0];
 }
 
-void qch_vm::f_cxnn(machine &m, const opcode &op) { // rand [r] [v]
-  auto [r, v] = split_rv(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : rand V%x, %#04x", m.pc, op, r, m.reg[r], v
-  );
-  #endif
+void qch_vm::rand(machine &m, const qch::instruction &inst) {
+  auto [r, v] = get_rb(inst);
 
   uint8_t rng = m.distribution(m.engine);
   m.reg[r] = (rng % 256) & v;
   m.pc += 2;
 }
 
-void qch_vm::f_dxyn(machine &m, const opcode &op) { // draw [r] [r] [v]
-  auto [x, y, n] = split_xyn(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : draw V%x, V%x, %x", m.pc, op, x, y, n
-  );
-  #endif
+void qch_vm::draw(machine &m, const qch::instruction &inst) {
+  auto [x, y, n] = get_rrn(inst);
 
   m.reg[0xf] = 0;
 
@@ -567,96 +386,54 @@ void qch_vm::f_dxyn(machine &m, const opcode &op) { // draw [r] [r] [v]
   m.pc +=  2;
 }
 
-void qch_vm::f_ex9e(machine &m, const opcode &op) { // keq [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : keq V%x", m.pc, op, x
-  );
-  #endif
-  if (m.keys[m.reg[x]]) {
+void qch_vm::keq(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
+    if (m.keys[m.reg[x]]) {
     m.pc += 2;
   }
 
   m.pc += 2;
 }
-void qch_vm::f_exa1(machine &m, const opcode &op) { // kne [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : kne V%x", m.pc, op, x
-  );
-  #endif
-  if (m.keys[m.reg[x]]) {
+void qch_vm::kne(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
+    if (m.keys[m.reg[x]]) {
     m.pc += 2;
   }
 
   m.pc += 2;
 }
 
-void qch_vm::f_fx07(machine &m, const opcode &op) { // std [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : std V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::std(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.reg[x] = m.delay_timer;
   m.pc += 2;
 }
 
-void qch_vm::f_fx0a(machine &m, const opcode &op) { // key [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : key V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::key(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.blocking = true;
   m.br = x;
   m.pc += 2;
 }
 
-void qch_vm::f_fx15(machine &m, const opcode &op) { // ldd [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : ldd V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::ldd(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.delay_timer = m.reg[x];
   m.pc += 2;
 }
 
-void qch_vm::f_fx18(machine &m, const opcode &op) { // lds [r]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : lds V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::lds(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.sound_timer = m.reg[x];
   m.pc += 2;
 }
 
-void qch_vm::f_fx1e(machine &m, const opcode &op) { // addi [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : addi V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::addi(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   uint16_t tmp = m.reg[x] + m.I;
   // set flag if carry (i.e. 9th bit is set)
@@ -665,27 +442,15 @@ void qch_vm::f_fx1e(machine &m, const opcode &op) { // addi [x]
   m.pc += 2;
 }
 
-void qch_vm::f_fx29(machine &m, const opcode &op) { // addr [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : addr V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::sprite(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.I = sprite_address(m.reg[x]);
   m.pc += 2;
 }
 
-void qch_vm::f_fx33(machine &m, const opcode &op) { // bcd [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : bcd V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::bcd(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   m.mem[m.I] = m.reg[x] / 100;
   m.mem[m.I + 1] = (m.reg[x] / 10) % 10;
@@ -693,14 +458,8 @@ void qch_vm::f_fx33(machine &m, const opcode &op) { // bcd [x]
   m.pc += 2;
 }
 
-void qch_vm::f_fx55(machine &m, const opcode &op) { // str [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : str V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::str(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   for (int i = 0; i < x; i++) {
     m.mem[m.I + i] = m.reg[i];
@@ -708,17 +467,33 @@ void qch_vm::f_fx55(machine &m, const opcode &op) { // str [x]
   m.pc += 2;
 }
 
-void qch_vm::f_fx65(machine &m, const opcode &op) { // ldr [x]
-  auto x = split_x(op);
-  #ifdef DEBUG
-  snprintf(
-    m.debug_out, m.debug_out_size,
-    "%#06x %#06x : ldr V%x", m.pc, op, x
-  );
-  #endif
+void qch_vm::ldr(machine &m, const qch::instruction &inst) {
+  auto x = get_r(inst);
 
   for (int i = 0; i < x; i++) {
     m.reg[i] = m.mem[m.I + i];
   }
   m.pc += 2;
+}
+
+void qch_vm::nop(machine &m, const qch::instruction &inst) {
+  m.pc += 2;
+}
+
+void qch_vm::halt(machine &m, const qch::instruction &inst) {
+  snprintf(
+    m.final, m.final_size,
+    "Halting Machine @ %#06x", m.pc
+  );
+
+  m.halted = true;
+}
+
+void qch_vm::panic(machine &m, const qch::instruction &inst) {
+  snprintf(
+    m.final, m.final_size,
+    "Unknown Instruction! [%#06x] @ %#06x", inst.data, m.pc
+  );
+
+  m.quit = true;
 }
