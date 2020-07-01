@@ -89,10 +89,7 @@ uint8_t qch_vm::sprite_address(const uint8_t index) {
 
 void qch_vm::load_program(machine &m, const std::vector<uint8_t> &program) {
   std::copy(program.begin(), program.end(), &m.mem[entry_point]);
-<<<<<<< HEAD
-=======
   m.program_size = program.size();
->>>>>>> dev
 }
 
 std::string qch_vm::dump_registers(const machine &m, bool ascii) {
