@@ -43,15 +43,16 @@ namespace qch_vm {
 
   struct machine {
     machine();
+    void resize(const uint8_t w, const uint8_t h);
 
     std::uniform_int_distribution<uint8_t> distribution;
     std::mt19937 engine;
 
-    static constexpr std::size_t display_width = 64;
-    static constexpr std::size_t display_height = 32;
+    uint8_t display_width = 1;
+    uint8_t display_height = 1;
     std::array<uint8_t, 16> reg = {0};
     std::array<uint8_t, 4096> mem = {0};
-    std::array<uint8_t, display_width*display_height> gfx = {0};
+    std::vector<uint8_t> gfx = {0}; // resize at run time
     std::array<uint16_t, 16> stack = {0};
     std::array<bool, 16> keys = {0};
     uint16_t pc = entry_point;

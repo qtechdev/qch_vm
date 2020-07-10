@@ -57,6 +57,20 @@ qch_vm::machine::machine() {
   engine.seed(std::random_device{}());
 };
 
+void qch_vm::machine::resize(const uint8_t w, const uint8_t h) {
+  display_width = w;
+  display_height = h;
+
+  reg = {
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    0, 0, 0, 0,
+    w, h, 0, 0
+  };
+
+  gfx.resize(w*h);
+}
+
 qch::instruction modify(const qch::instruction &inst, const uint16_t data) {
   qch::instruction new_inst = inst;
   new_inst.data = data;
@@ -90,6 +104,10 @@ uint8_t qch_vm::sprite_address(const uint8_t index) {
 void qch_vm::load_program(machine &m, const std::vector<uint8_t> &program) {
   std::copy(program.begin(), program.end(), &m.mem[entry_point]);
   m.program_size = program.size();
+
+  auto [w, h] = qch::parse_header(program);
+
+  m.resize(w, h);
 }
 
 std::string qch_vm::dump_registers(const machine &m, bool ascii) {
@@ -192,7 +210,7 @@ void qch_vm::get_key(machine &m) {
 }
 
 void qch_vm::clear(machine &m, const qch::instruction &inst) {
-  m.gfx.fill(0);
+  std::fill(m.gfx.begin(), m.gfx.end(), 0);
   m.draw = true;
   m.pc += 2;
 }

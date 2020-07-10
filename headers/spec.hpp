@@ -2,6 +2,7 @@
 #define __QCH_SPEC_HPP__
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace qch {
@@ -22,6 +23,43 @@ namespace qch {
     A   = 0x0001 | (arg_type::A << 4),
     D   = 0x0001 | (arg_type::D << 4),
   };
+
+  struct header {
+    uint8_t w;
+    uint8_t h;
+  };
+
+  static constexpr std::size_t header_size = 16;
+  static constexpr header default_header = { 64, 32 };
+
+  static const std::optional<std::vector<uint8_t>> get_header(
+    const std::vector<uint8_t> &program
+  ) {
+    if (program.size() <= header_size) {
+      return {};
+    }
+
+    return std::vector<uint8_t>(
+      program.end() - header_size,
+      program.end()
+    );
+  }
+
+  static const header parse_header(const std::vector<uint8_t> &program) {
+    auto raw_header = get_header(program);
+    if (!raw_header) {
+      return default_header;
+    }
+
+    header head;
+
+    if (((*raw_header)[0] == 0xc8) && ((*raw_header)[1] == 0xc8)) {
+      head.w = (*raw_header)[6];
+      head.h = (*raw_header)[7];
+    }
+
+    return head;
+  }
 
   struct instruction {
     union {
