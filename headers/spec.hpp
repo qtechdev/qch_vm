@@ -51,7 +51,7 @@ namespace qch {
       return default_header;
     }
 
-    header head;
+    header head = default_header;
 
     if (((*raw_header)[0] == 0xc8) && ((*raw_header)[1] == 0xc8)) {
       head.w = (*raw_header)[6];
